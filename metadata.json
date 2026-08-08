@@ -1,0 +1,6 @@
+{
+  "name": "Roof Twin - Terrace 3D Model",
+  "description": "Interactive 3D digital twin of a 45 x 38 ft rooftop terrace featuring AC condensers, perimeter strips, entrance structure, and real-time asset inspection.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
