@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Eye, EyeOff, Maximize2, Compass } from 'lucide-react';
+import { Eye, EyeOff, Maximize2, Compass, Type, Layers } from 'lucide-react';
 import { Header } from './components/Header';
 import { LayerPanel } from './components/LayerPanel';
 import { InfoCard } from './components/InfoCard';
@@ -14,14 +14,17 @@ export default function App() {
     struct: true,
     util: true,
     context: true,
-    dims: true, // Visible by default so 45 ft and 38 ft measurements show on screen
+    dims: true,
   });
 
   const [activeView, setActiveView] = useState<ViewPreset | null>('iso');
   const [selectedAsset, setSelectedAsset] = useState<AssetInfo | null>(null);
   
-  // Single-click toggle for Structure-Only / Clean View mode
+  // Toggle state for full UI side panel controls
   const [showUI, setShowUI] = useState<boolean>(false);
+
+  // Toggle state for all 3D text labels, measurements & attached info badges
+  const [showText, setShowText] = useState<boolean>(true);
 
   const toggleLayer = useCallback((key: LayerKey) => {
     setLayers((prev) => ({
@@ -38,7 +41,7 @@ export default function App() {
     setSelectedAsset(asset);
   }, []);
 
-  // Keyboard shortcuts for layers (1-6) and UI toggle (H or Space)
+  // Keyboard shortcuts for layers (1-6) and text toggle (T) / UI toggle (H)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement)?.tagName)) {
@@ -59,7 +62,9 @@ export default function App() {
         toggleLayer(layerKey);
       }
 
-      if (e.key.toLowerCase() === 'h') {
+      if (e.key.toLowerCase() === 't') {
+        setShowText((prev) => !prev);
+      } else if (e.key.toLowerCase() === 'h') {
         setShowUI((prev) => !prev);
       }
     };
@@ -77,69 +82,72 @@ export default function App() {
       <main className="w-full h-full">
         <TerraceViewer
           layers={layers}
+          showText={showText}
           activeView={activeView}
           onSelectAsset={handleSelectAsset}
           selectedAssetCode={selectedAsset?.code || null}
         />
       </main>
 
-      {/* Top Floating Bar: Measurements & Single Click UI Toggle */}
-      <div className="fixed top-3 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 max-w-[95vw]">
-        {/* Sleek Light Measurement Pill Badge */}
-        <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#121820]/80 backdrop-blur-md border border-white/10 shadow-md text-xs font-sans tracking-wide text-[#cbd5e1]">
-          <Compass className="w-3.5 h-3.5 text-[#ffb020] shrink-0" />
-          <span className="font-normal text-[11px]"><strong className="font-semibold text-white">45 ft</strong> Front × <strong className="font-semibold text-white">38 ft</strong> Side</span>
-          <span className="hidden sm:inline text-[#64748b] text-[10px] border-l border-white/10 pl-2">1,710 sq ft</span>
-        </div>
+      {/* Top Side Bar: Positioned on Top-Left Side so structure is unobscured */}
+      <div className="fixed top-3 left-3 sm:left-4 z-30 flex items-center gap-2 max-w-[95vw] flex-wrap pointer-events-auto">
+        {/* Toggle Button for Show Text / Hide Text */}
+        <button
+          onClick={() => setShowText(!showText)}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all shadow-lg border backdrop-blur-md cursor-pointer ${
+            showText
+              ? 'bg-[#ffb020] border-[#ffb020] text-[#10131a] hover:bg-[#ffa000]'
+              : 'bg-[#1e2632]/90 border-[#3a475a] text-[#94a3b8] hover:text-white hover:bg-[#283444]'
+          }`}
+          title="Click to show/hide all measurements, text badges, and callouts"
+        >
+          <Type className="w-3.5 h-3.5" />
+          <span>{showText ? 'Hide Text' : 'Show Text'}</span>
+        </button>
 
-        {/* Solar Output & Estimated Units Badge */}
-        <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#0d2238]/90 backdrop-blur-md border border-[#38bdf8]/40 shadow-md text-xs font-sans tracking-wide text-[#38bdf8]">
-          <span className="font-bold text-[11px] text-[#38bdf8]">69 PANELS</span>
-          <span className="text-white/80 font-mono text-[10px]">(65 Structure + 4 Geyser Roof)</span>
-          <span className="border-l border-[#38bdf8]/30 pl-2 text-white font-semibold text-[11px]">⚡ ~170 Units/Day</span>
-        </div>
+        {/* Elegant Side Info Badge (Shown ONLY when showText is true) */}
+        {showText && (
+          <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#111722]/90 backdrop-blur-md border border-[#2b384e] shadow-lg text-xs font-sans whitespace-nowrap transition-all">
+            <Compass className="w-3.5 h-3.5 text-[#ffb020] shrink-0" />
+            <span className="text-[#cbd5e1] text-[11px] font-sans tracking-wide">
+              <strong className="font-semibold text-white">45 ft</strong> Front × <strong className="font-semibold text-white">38 ft</strong> Side
+            </span>
+            <span className="text-[#334155] text-[10px]">|</span>
+            <span className="text-[#38bdf8] font-bold text-[11px] tracking-wide">73 Panels (645W)</span>
+            <span className="text-[#38bdf8]/80 text-[10px] hidden md:inline">⚡ ~200+ Units/Day</span>
+          </div>
+        )}
 
-        {/* Single Click Toggle for Structure Only / Full UI */}
+        {/* Toggle Button for Show/Hide Controls & Layers */}
         <button
           onClick={() => setShowUI(!showUI)}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all shadow-lg border backdrop-blur-md cursor-pointer ${
             showUI
-              ? 'bg-[#1e2632]/90 border-[#3a475a] text-[#e9edf3] hover:bg-[#283444]'
-              : 'bg-[#ffb020] border-[#ffb020] text-[#10131a] font-bold hover:bg-[#ffa000]'
+              ? 'bg-[#253040]/90 border-[#475569] text-[#e9edf3] hover:bg-[#324054]'
+              : 'bg-[#151c28]/85 border-[#2b384e] text-[#cbd5e1] hover:text-white hover:bg-[#1e2838]'
           }`}
-          title="Click to toggle structure-only mode / UI panels"
+          title="Click to toggle side controls & layers panel"
         >
-          {showUI ? (
-            <>
-              <EyeOff className="w-3.5 h-3.5" />
-              <span>Hide Controls (Structure Only)</span>
-            </>
-          ) : (
-            <>
-              <Eye className="w-3.5 h-3.5" />
-              <span>Show Controls & Layers</span>
-            </>
-          )}
+          <Layers className="w-3.5 h-3.5 text-[#38bdf8]" />
+          <span>{showUI ? 'Hide Controls' : 'Show Controls'}</span>
         </button>
 
-        {/* Quick View Switchers when in Structure Only mode */}
-        {!showUI && (
-          <div className="hidden md:flex items-center gap-1 bg-[#121820]/80 backdrop-blur-md border border-[#2a3340] rounded-full p-1">
-            {(['iso', 'plan', 'entry'] as ViewPreset[]).map((v) => (
-              <button
-                key={v}
-                onClick={() => handleSelectView(v)}
-                className={`px-2.5 py-1 text-[10px] font-mono rounded-full uppercase transition-colors ${
-                  activeView === v
-                    ? 'bg-[#ffb020] text-[#10131a] font-bold'
-                    : 'text-[#8b96a6] hover:text-[#e9edf3]'
-                }`}
-              >
-                {v}
-              </button>
-            ))}
-          </div>
-        )}
+        {/* Quick Camera View Preset Buttons */}
+        <div className="flex items-center gap-1 bg-[#111722]/85 backdrop-blur-md border border-[#2b384e] rounded-full p-1 shadow-md">
+          {(['iso', 'plan', 'entry'] as ViewPreset[]).map((v) => (
+            <button
+              key={v}
+              onClick={() => handleSelectView(v)}
+              className={`px-2.5 py-1 text-[10px] font-mono rounded-full uppercase transition-colors cursor-pointer ${
+                activeView === v
+                  ? 'bg-[#ffb020] text-[#10131a] font-bold'
+                  : 'text-[#8b96a6] hover:text-[#e9edf3]'
+              }`}
+            >
+              {v}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Control Panels & Overlays - shown when showUI is true */}
@@ -154,6 +162,14 @@ export default function App() {
 
       {/* Help Hint */}
       {showUI && <HelpHint />}
+
+      {/* Signature Credit Badge Overlay (Shown ONLY when showText is true) */}
+      {showText && (
+        <div className="fixed bottom-3 right-3 z-30 flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#121820]/90 backdrop-blur-md border border-[#ffb020]/50 shadow-lg text-xs font-sans text-[#ffb020] pointer-events-auto">
+          <span className="w-2 h-2 rounded-full bg-[#ffb020] animate-pulse"></span>
+          <span className="font-semibold text-[11px] tracking-wide text-white">Made by Engr. Shamroze</span>
+        </div>
+      )}
     </div>
   );
 }

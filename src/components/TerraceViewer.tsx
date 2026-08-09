@@ -5,6 +5,7 @@ import { AssetInfo, LayerKey, ViewPreset } from '../types';
 
 interface TerraceViewerProps {
   layers: Record<LayerKey, boolean>;
+  showText?: boolean;
   activeView: ViewPreset | null;
   onSelectAsset: (asset: AssetInfo | null) => void;
   selectedAssetCode: string | null;
@@ -12,6 +13,7 @@ interface TerraceViewerProps {
 
 export const TerraceViewer: React.FC<TerraceViewerProps> = ({
   layers,
+  showText = true,
   activeView,
   onSelectAsset,
   selectedAssetCode,
@@ -56,15 +58,23 @@ export const TerraceViewer: React.FC<TerraceViewerProps> = ({
     }
   }, [activeView]);
 
-  // Layer visibility update
+  // Layer & 3D Text/Labels visibility update
   useEffect(() => {
     Object.keys(layers).forEach((key) => {
       const group = layersGroupRef.current[key];
       if (group) {
-        group.visible = layers[key as LayerKey];
+        if (key === 'dims') {
+          group.visible = showText && layers.dims;
+        } else {
+          group.visible = layers[key as LayerKey];
+        }
       }
     });
-  }, [layers]);
+
+    if (layersGroupRef.current['labels']) {
+      layersGroupRef.current['labels'].visible = showText;
+    }
+  }, [layers, showText]);
 
   // Main Three.js Initialization
   useEffect(() => {
@@ -363,8 +373,11 @@ export const TerraceViewer: React.FC<TerraceViewerProps> = ({
       util: new THREE.Group(),
       context: new THREE.Group(),
       dims: new THREE.Group(),
+      labels: new THREE.Group(),
       base: new THREE.Group()
     };
+    const GLabels = LGroup.labels;
+    GLabels.visible = showText;
     layersGroupRef.current = LGroup;
 
     Object.keys(LGroup).forEach((k) => {
@@ -584,7 +597,7 @@ export const TerraceViewer: React.FC<TerraceViewerProps> = ({
     // Label Sprite on Left Extended Floor Deck (Space for future additions)
     const leftExtLabel = createLabelSprite('EXTENDED FLOOR DECK', 'Space Reserved for Future Additions', 1.8, 'rgba(15,24,42,0.92)', '#38bdf8');
     leftExtLabel.position.set(LxO + (GATE.x - LxO) / 2, 0.10, OZ + extFloorD / 2);
-    GStruct.add(leftExtLabel);
+    GLabels.add(leftExtLabel);
 
     box(PART, 0.95, zB - zA, M.cream, LxO - PART / 2, 0, (zA + zB) / 2, GStruct);
     box(0.34, 0.10, zB - zA, M.coping, LxO - PART / 2, 0.95, (zA + zB) / 2, GStruct);
@@ -701,7 +714,7 @@ export const TerraceViewer: React.FC<TerraceViewerProps> = ({
     // Label Badge Sprite on Right Canopy Roof Solar Array
     const gRoofLabel = createLabelSprite('4 PANELS', 'CANOPY ROOF ARRAY', 1.5, 'rgba(15,24,42,0.92)', '#38bdf8');
     gRoofLabel.position.set(canopyX, gRoofY + 0.85, canopyZ);
-    GSolar.add(gRoofLabel);
+    GLabels.add(gRoofLabel);
 
     // 3. DUAL TESLA GEYSERS & WATER TANK UNDERNEATH SMALL RIGHT CANOPY ROOF
     const gAsset: AssetInfo = {
@@ -744,7 +757,7 @@ export const TerraceViewer: React.FC<TerraceViewerProps> = ({
     // Tesla Geyser Label Badge Sprite under right canopy
     const geyserLabel = createLabelSprite('2 × TESLA GEYSERS', 'Smart Heat Pump System', 1.8, 'rgba(18,22,28,0.92)', '#ff3344');
     geyserLabel.position.set(+4.85, 2.30, canopyZ + 0.40);
-    GStruct.add(geyserLabel);
+    GLabels.add(geyserLabel);
 
     // Water Filtration Tank / Pressure Vessel under right canopy (X = +6.0, Z = canopyZ)
     const tankX = +6.0, tankZ = canopyZ;
@@ -755,7 +768,7 @@ export const TerraceViewer: React.FC<TerraceViewerProps> = ({
     // Tank Label Badge Sprite under right canopy
     const tankLabel = createLabelSprite('WATER TANK', 'Filtration & Pressure Tank', 1.4, 'rgba(18,22,28,0.92)', '#38bdf8');
     tankLabel.position.set(tankX, 2.05, tankZ + 0.40);
-    GStruct.add(tankLabel);
+    GLabels.add(tankLabel);
 
     // 6. ROOF-MOUNTED STRUCTURE SOLAR SYSTEM (POLE MOUNTED WITH HEAVY GIRDERS & 4 ARRAYS)
     // Spatial parameters matching reference layout and specification:
@@ -772,9 +785,11 @@ export const TerraceViewer: React.FC<TerraceViewerProps> = ({
       return hLeft + frac * (hRight - hLeft);
     }
 
-    // Concrete Footing Pedestals & Heavy Steel Support Posts
-    const postXPositions = [-8.3, -4.9, -0.5, +3.1, +6.3];
-    const postZPositions = [-4.6, -1.5, +1.5, +4.6];
+    // Concrete Footing Pedestals & Heavy Steel Support Posts (40 Girders Grid)
+    // Measurement Specification: 1st pole at 0, 2nd at 9 ft, 3rd at 24" (2 ft), 4th at 9 ft, 5th at 24", 6th at 9 ft, 7th at 24", 8th at 9 ft
+    // 8 Column positions × 5 Z-Depth Rows = 40 Vertical Heavy Steel Girders Total
+    const postXPositions = [-8.30, -5.56, -4.95, -2.21, -1.60, +1.14, +1.75, +4.49];
+    const postZPositions = [-4.6, -2.3, 0.0, +2.3, +4.6]; // 5 rows spanning 38 ft depth
 
     postXPositions.forEach((px) => {
       const py = getGirderY(px);
@@ -783,17 +798,55 @@ export const TerraceViewer: React.FC<TerraceViewerProps> = ({
         box(0.50, 0.14, 0.50, M.slab, px, 0, pz, GSolar);
         // Steel base plate
         box(0.38, 0.03, 0.38, M.steelD, px, 0.14, pz, GSolar);
-        // Vertical steel column post extending from slab to main girder height Y(px)
+        // Vertical steel column girder extending from slab to main roof height Y(px)
         const colHeight = py - 0.17;
-        box(0.16, colHeight, 0.16, M.steel, px, 0.17, pz, GSolar);
+        const postMesh = box(0.18, colHeight, 0.18, M.galvGirder, px, 0.17, pz, GSolar, {
+          code: 'R1-POST-GIRDER',
+          name: 'Heavy Steel Post Girder (40 Total)',
+          rows: [
+            ['Total Count', '40 Main Vertical Steel Girders'],
+            ['Spacing Pattern', 'Alternating 9 ft bays & 24 in (2 ft) double-column pairs'],
+            ['Grid Layout', '8 Columns × 5 Longitudinal Rows'],
+            ['Location X', `${px.toFixed(2)} m (${((px + 8.3) / 0.3048).toFixed(1)} ft from start)`],
+            ['Location Z', `${pz.toFixed(2)} m`],
+            ['Design Engineer', 'Engr. Shamroze']
+          ],
+          note: 'One of 40 heavy steel support girders engineered with alternating 9 ft bay and 24 in column spacing by Engr. Shamroze.'
+        });
+        pickable.push(postMesh);
+
         // Structural gusset / bracket at top and bottom
-        box(0.24, 0.20, 0.24, M.steelD, px, 0.17, pz, GSolar);
-        box(0.24, 0.25, 0.24, M.steelD, px, py - 0.25, pz, GSolar);
+        box(0.26, 0.20, 0.26, M.steelD, px, 0.17, pz, GSolar);
+        box(0.26, 0.25, 0.26, M.steelD, px, py - 0.25, pz, GSolar);
       });
     });
 
+    // Horizontal Steel Tie-Brace Channels between 24" Twin Post Pairs (P2-P3, P4-P5, P6-P7)
+    const twinPairs = [[-5.56, -4.95], [-2.21, -1.60], [+1.14, +1.75]];
+    twinPairs.forEach(([x1, x2]) => {
+      const midX = (x1 + x2) / 2;
+      const spanW = Math.abs(x2 - x1);
+      const py = getGirderY(midX);
+      postZPositions.forEach((pz) => {
+        // Mid-height tie beam
+        const tieMid = new THREE.Mesh(new THREE.BoxGeometry(spanW, 0.10, 0.10), M.steelD);
+        tieMid.position.set(midX, py * 0.50, pz);
+        GSolar.add(tieMid);
+
+        // Top-height tie beam
+        const tieTop = new THREE.Mesh(new THREE.BoxGeometry(spanW, 0.12, 0.12), M.steelD);
+        tieTop.position.set(midX, py - 0.25, pz);
+        GSolar.add(tieTop);
+      });
+    });
+
+    // Label Sprite for 40 Girders Grid
+    const girderGridLabel = createLabelSprite('40 HEAVY GIRDERS INSTALLED', '9 ft Bays & 24" Twin Columns · Engr. Shamroze', 2.2, 'rgba(15,24,42,0.95)', '#38bdf8');
+    girderGridLabel.position.set(-1.8, hLeft * 0.6, +4.8);
+    GLabels.add(girderGridLabel);
+
     // Main Sloped Transverse Heavy Steel Girders ("Guarders" - Heavy I-Beams)
-    // 4 continuous heavy I-beams spanning across X from left (-8.5m) to right (+6.5m)
+    // 5 continuous heavy I-beams spanning across X from left (-8.5m) to right (+6.5m)
     postZPositions.forEach((pz) => {
       const spanLen = Math.hypot(xRight - xLeft, hRight - hLeft);
       const angleY = Math.atan2(hRight - hLeft, xRight - xLeft);
@@ -822,17 +875,10 @@ export const TerraceViewer: React.FC<TerraceViewerProps> = ({
       GSolar.add(purlin);
     });
 
-    // Diagonal Cross-Bracing Rods between main posts for wind stability
-    for (let i = 0; i < postXPositions.length - 1; i++) {
-      const x1 = postXPositions[i], x2 = postXPositions[i + 1];
-      const y1 = getGirderY(x1), y2 = getGirderY(x2);
-      [-4.6, +4.6].forEach((pz) => {
-        const brace = new THREE.Mesh(new THREE.BoxGeometry(Math.hypot(x2 - x1, y2 - 0.2), 0.04, 0.04), M.steel);
-        brace.position.set((x1 + x2) / 2, (y1 + 0.2) / 2, pz);
-        brace.rotation.z = Math.atan2(y2 - 0.2 - 0.2, x2 - x1);
-        GSolar.add(brace);
-      });
-    }
+    // "MADE BY ENGR SHAMROZE" Credit Badge on Top Corner of Main Structure
+    const engLabel = createLabelSprite('MADE BY ENGR SHAMROZE', '73 Panels Total (645W) · 47.1 kWp System', 2.8, 'rgba(15,24,42,0.95)', '#ffb020');
+    engLabel.position.set(xRight - 1.2, hRight + 1.25, -4.6);
+    GLabels.add(engLabel);
 
     // 4 SOLAR ARRAYS & 3 ELEVATED WALKWAYS (EXACT REFERENCE LAYOUT)
     // ARRAY-04: 15 panels (3 cols x 5 rows, #51-#65) starting at 6ft strip
@@ -917,6 +963,19 @@ export const TerraceViewer: React.FC<TerraceViewerProps> = ({
           panel.position.set(px, py, pz);
           panel.rotation.z = angleY;
           panel.castShadow = true;
+          panel.userData.asset = {
+            code: `R1-${arr.name}`,
+            name: `${arr.name} Solar Panels (645W)`,
+            rows: [
+              ['Main Structure', '65 Panels (41.9 kWp)'],
+              ['Canopy Roof', '4 Panels (2.58 kWp)'],
+              ['Existing Add-on', '4 Panels (2.58 kWp)'],
+              ['Total Project', '73 Panels (47.1 kWp Total)'],
+              ['Module Specs', '645W Tier-1 N-Type TOPCon']
+            ],
+            note: '65 high-efficiency 645W solar PV panels mounted on heavy elevated steel structure engineered by Engr. Shamroze.'
+          };
+          pickable.push(panel);
           GSolar.add(panel);
         }
       }
@@ -926,7 +985,7 @@ export const TerraceViewer: React.FC<TerraceViewerProps> = ({
       const arrTopY = getGirderY(arrCenterX) + 0.75;
       const arrLabel = createLabelSprite(arr.name, '', 1.8, 'rgba(15,24,42,0.92)', '#38bdf8');
       arrLabel.position.set(arrCenterX, arrTopY, 0);
-      GSolar.add(arrLabel);
+      GLabels.add(arrLabel);
     });
 
     // Render 3 Elevated 18" Walkway Grates between arrays (SLEEK BLACK WALKWAYS)
@@ -955,7 +1014,7 @@ export const TerraceViewer: React.FC<TerraceViewerProps> = ({
       // 18" Walkway Label Badge
       const wLabel = createLabelSprite('18" WALKWAY', '', 1.1, 'rgba(18,22,28,0.92)', '#ffb020');
       wLabel.position.set(wx, wy + 0.55, startZ - 0.5);
-      GSolar.add(wLabel);
+      GLabels.add(wLabel);
     });
 
     // Front Elevated 18" Walkway running along the 45 ft front wall
@@ -969,7 +1028,7 @@ export const TerraceViewer: React.FC<TerraceViewerProps> = ({
     // Front 18" Walkway Label
     const frontWLabel = createLabelSprite('18" WALKWAY', '', 1.8, 'rgba(18,22,28,0.92)', '#ffb020');
     frontWLabel.position.set(0, frontWy + 0.65, startZ - pDepth / 2 - 0.4);
-    GSolar.add(frontWLabel);
+    GLabels.add(frontWLabel);
 
     // FLEXIBLE LADDER AT 45 FT FRONT WALL
     // Positioned at front wall near 45 ft mark (X = -1.8m, Z = -HZ)
@@ -1018,8 +1077,8 @@ export const TerraceViewer: React.FC<TerraceViewerProps> = ({
 
     // Flexible Ladder Canvas Label
     const ladderLabel = createLabelSprite('FLEXIBLE LADDER', 'Access to Elevated Solar Deck', 1.8, 'rgba(255,176,32,0.95)', '#10131a');
-    ladderLabel.position.set(0, ladderTopY / 2, 0.35);
-    flexLadderGroup.add(ladderLabel);
+    ladderLabel.position.set(ladderX, ladderTopY / 2, ladderZ + 0.35);
+    GLabels.add(ladderLabel);
 
     // 4. WATER TANK & PLINTHS
     const GUtil = LGroup.util;
