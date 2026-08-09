@@ -786,9 +786,9 @@ export const TerraceViewer: React.FC<TerraceViewerProps> = ({
     }
 
     // Concrete Footing Pedestals & Heavy Steel Support Posts (40 Girders Grid)
-    // Measurement Specification: 1st pole at 0, 2nd at 9 ft, 3rd at 24" (2 ft), 4th at 9 ft, 5th at 24", 6th at 9 ft, 7th at 24", 8th at 9 ft
-    // 8 Column positions × 5 Z-Depth Rows = 40 Vertical Heavy Steel Girders Total
-    const postXPositions = [-8.30, -5.56, -4.95, -2.21, -1.60, +1.14, +1.75, +4.49];
+    // Measurement Specification: 8 Column positions × 5 Z-Depth Rows = 40 Vertical Heavy Steel Girders Total
+    // Twin Column Pairs (P2-P3, P4-P5, P6-P7) with 24" (2 ft) spacing positioned directly under the 3 elevated walkways
+    const postXPositions = [-8.30, -5.335, -4.725, -0.805, -0.195, +2.695, +3.305, +5.50];
     const postZPositions = [-4.6, -2.3, 0.0, +2.3, +4.6]; // 5 rows spanning 38 ft depth
 
     postXPositions.forEach((px) => {
@@ -805,13 +805,13 @@ export const TerraceViewer: React.FC<TerraceViewerProps> = ({
           name: 'Heavy Steel Post Girder (40 Total)',
           rows: [
             ['Total Count', '40 Main Vertical Steel Girders'],
-            ['Spacing Pattern', 'Alternating 9 ft bays & 24 in (2 ft) double-column pairs'],
+            ['Structure Placement', '24" Double-Pole Pairs positioned directly under 3 Walkways'],
             ['Grid Layout', '8 Columns × 5 Longitudinal Rows'],
             ['Location X', `${px.toFixed(2)} m (${((px + 8.3) / 0.3048).toFixed(1)} ft from start)`],
             ['Location Z', `${pz.toFixed(2)} m`],
             ['Design Engineer', 'Engr. Shamroze']
           ],
-          note: 'One of 40 heavy steel support girders engineered with alternating 9 ft bay and 24 in column spacing by Engr. Shamroze.'
+          note: 'One of 40 heavy steel support girders engineered in 24" double-pole pairs positioned directly under the 3 elevated walkways by Engr. Shamroze.'
         });
         pickable.push(postMesh);
 
@@ -821,8 +821,8 @@ export const TerraceViewer: React.FC<TerraceViewerProps> = ({
       });
     });
 
-    // Horizontal Steel Tie-Brace Channels between 24" Twin Post Pairs (P2-P3, P4-P5, P6-P7)
-    const twinPairs = [[-5.56, -4.95], [-2.21, -1.60], [+1.14, +1.75]];
+    // Horizontal Steel Tie-Brace Channels between 24" Twin Post Pairs directly under Walkway 1, 2, and 3
+    const twinPairs = [[-5.335, -4.725], [-0.805, -0.195], [+2.695, +3.305]];
     twinPairs.forEach(([x1, x2]) => {
       const midX = (x1 + x2) / 2;
       const spanW = Math.abs(x2 - x1);
@@ -841,7 +841,7 @@ export const TerraceViewer: React.FC<TerraceViewerProps> = ({
     });
 
     // Label Sprite for 40 Girders Grid
-    const girderGridLabel = createLabelSprite('40 HEAVY GIRDERS INSTALLED', '9 ft Bays & 24" Twin Columns · Engr. Shamroze', 2.2, 'rgba(15,24,42,0.95)', '#38bdf8');
+    const girderGridLabel = createLabelSprite('40 HEAVY GIRDERS INSTALLED', '24" Twin Columns Directly Under Walkways · Engr. Shamroze', 2.2, 'rgba(15,24,42,0.95)', '#38bdf8');
     girderGridLabel.position.set(-1.8, hLeft * 0.6, +4.8);
     GLabels.add(girderGridLabel);
 
