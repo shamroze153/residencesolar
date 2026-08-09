@@ -4,6 +4,7 @@ import { Header } from './components/Header';
 import { LayerPanel } from './components/LayerPanel';
 import { InfoCard } from './components/InfoCard';
 import { HelpHint } from './components/HelpHint';
+import { SunPathControl } from './components/SunPathControl';
 import { TerraceViewer } from './components/TerraceViewer';
 import { AssetInfo, LayerKey, ViewPreset } from './types';
 
@@ -20,11 +21,29 @@ export default function App() {
   const [activeView, setActiveView] = useState<ViewPreset | null>('iso');
   const [selectedAsset, setSelectedAsset] = useState<AssetInfo | null>(null);
   
+  // Dynamic Sun & Time-of-Day states
+  const [timeOfDay, setTimeOfDay] = useState<number>(12.0); // 6.0 AM to 18.5 PM
+  const [isPlaying, setIsPlaying] = useState<boolean>(false);
+  const [showSunArc, setShowSunArc] = useState<boolean>(true);
+
   // Toggle state for full UI side panel controls
   const [showUI, setShowUI] = useState<boolean>(false);
 
   // Toggle state for all 3D text labels, measurements & attached info badges
   const [showText, setShowText] = useState<boolean>(true);
+
+  // Sun Animation Loop
+  useEffect(() => {
+    if (!isPlaying) return;
+    const interval = setInterval(() => {
+      setTimeOfDay((prev) => {
+        let next = prev + 0.05;
+        if (next > 18.5) next = 6.0;
+        return next;
+      });
+    }, 40);
+    return () => clearInterval(interval);
+  }, [isPlaying]);
 
   const toggleLayer = useCallback((key: LayerKey) => {
     setLayers((prev) => ({
@@ -83,9 +102,12 @@ export default function App() {
         <TerraceViewer
           layers={layers}
           showText={showText}
+          timeOfDay={timeOfDay}
+          showSunArc={showSunArc}
           activeView={activeView}
           onSelectAsset={handleSelectAsset}
           selectedAssetCode={selectedAsset?.code || null}
+          onTimeChange={(t) => setTimeOfDay(t)}
         />
       </main>
 
@@ -149,6 +171,25 @@ export default function App() {
           ))}
         </div>
       </div>
+
+      {/* Dynamic Interactive Sun Path & Shadow Control Panel */}
+      <SunPathControl
+        timeOfDay={timeOfDay}
+        setTimeOfDay={setTimeOfDay}
+        isPlaying={isPlaying}
+        setIsPlaying={setIsPlaying}
+        showSunArc={showSunArc}
+        setShowSunArc={setShowSunArc}
+        showText={showText}
+      />
+
+      {/* Selected Asset Information Modal Card */}
+      {selectedAsset && (
+        <InfoCard
+          asset={selectedAsset}
+          onClose={() => setSelectedAsset(null)}
+        />
+      )}
 
       {/* Control Panels & Overlays - shown when showUI is true */}
       {showUI && (

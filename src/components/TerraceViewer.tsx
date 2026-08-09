@@ -6,17 +6,23 @@ import { AssetInfo, LayerKey, ViewPreset } from '../types';
 interface TerraceViewerProps {
   layers: Record<LayerKey, boolean>;
   showText?: boolean;
+  timeOfDay?: number;
+  showSunArc?: boolean;
   activeView: ViewPreset | null;
   onSelectAsset: (asset: AssetInfo | null) => void;
   selectedAssetCode: string | null;
+  onTimeChange?: (time: number) => void;
 }
 
 export const TerraceViewer: React.FC<TerraceViewerProps> = ({
   layers,
   showText = true,
+  timeOfDay = 12.0,
+  showSunArc = true,
   activeView,
   onSelectAsset,
   selectedAssetCode,
+  onTimeChange,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
@@ -30,6 +36,12 @@ export const TerraceViewer: React.FC<TerraceViewerProps> = ({
   const pickableRef = useRef<THREE.Mesh[]>([]);
   const selectedMeshRef = useRef<THREE.Mesh | null>(null);
   const selectedOriginalMatRef = useRef<THREE.Material | THREE.Material[] | null>(null);
+
+  // Dynamic Sun & Sky refs
+  const sunLightRef = useRef<THREE.DirectionalLight | null>(null);
+  const hemiLightRef = useRef<THREE.HemisphereLight | null>(null);
+  const sunMeshRef = useRef<THREE.Group | null>(null);
+  const sunArcGroupRef = useRef<THREE.Group | null>(null);
 
   // Camera animation targets for smooth preset transitions
   const targetCamPos = useRef<THREE.Vector3>(new THREE.Vector3(13, 14, 18));
@@ -75,6 +87,71 @@ export const TerraceViewer: React.FC<TerraceViewerProps> = ({
       layersGroupRef.current['labels'].visible = showText;
     }
   }, [layers, showText]);
+
+  // Dynamic Sun Path & Shadow Position Update Effect
+  useEffect(() => {
+    if (!sunLightRef.current || !sunMeshRef.current) return;
+
+    const t = timeOfDay ?? 12.0;
+    const norm = Math.max(0, Math.min(1, (t - 6.0) / 12.0));
+    const angleRad = Math.PI * norm;
+    const elevation = Math.sin(angleRad);
+
+    const y = 2.5 + elevation * 30.0;
+    const x = 35.0 * Math.cos(angleRad);
+    const z = -10.0 + 26.0 * Math.sin(angleRad);
+
+    // Position sun light & visual 3D sun sphere
+    sunLightRef.current.position.set(x, y, z);
+    sunMeshRef.current.position.set(x, y, z);
+
+    // Calculate light color and intensity transitions based on time of day
+    const sunColor = new THREE.Color();
+    const hemiSky = new THREE.Color();
+    let intensity = 1.0;
+
+    if (t < 7.5) {
+      // Sunrise / Dawn (6.0 - 7.5)
+      const factor = Math.max(0, (t - 6.0) / 1.5);
+      sunColor.lerpColors(new THREE.Color(0xff5511), new THREE.Color(0xffaa33), factor);
+      hemiSky.lerpColors(new THREE.Color(0x3a2e42), new THREE.Color(0x8fa8cd), factor);
+      intensity = 0.65 + factor * 0.35;
+    } else if (t < 11.5) {
+      // Morning (7.5 - 11.5)
+      const factor = (t - 7.5) / 4.0;
+      sunColor.lerpColors(new THREE.Color(0xffaa33), new THREE.Color(0xffffff), factor);
+      hemiSky.lerpColors(new THREE.Color(0x8fa8cd), new THREE.Color(0xdae6f4), factor);
+      intensity = 1.0 + factor * 0.25;
+    } else if (t < 13.5) {
+      // Solar Noon (11.5 - 13.5)
+      sunColor.setHex(0xffffff);
+      hemiSky.setHex(0xebf3fc);
+      intensity = 1.25;
+    } else if (t < 16.5) {
+      // Afternoon (13.5 - 16.5)
+      const factor = (t - 13.5) / 3.0;
+      sunColor.lerpColors(new THREE.Color(0xffffff), new THREE.Color(0xffc866), factor);
+      hemiSky.lerpColors(new THREE.Color(0xebf3fc), new THREE.Color(0xdae6f4), factor);
+      intensity = 1.25 - factor * 0.25;
+    } else {
+      // Sunset / Dusk (16.5 - 18.5)
+      const factor = Math.min(1, (t - 16.5) / 2.0);
+      sunColor.lerpColors(new THREE.Color(0xffc866), new THREE.Color(0xff3300), factor);
+      hemiSky.lerpColors(new THREE.Color(0xdae6f4), new THREE.Color(0x2d1f38), factor);
+      intensity = 1.0 - factor * 0.55;
+    }
+
+    sunLightRef.current.color.copy(sunColor);
+    sunLightRef.current.intensity = intensity;
+
+    if (hemiLightRef.current) {
+      hemiLightRef.current.color.copy(hemiSky);
+    }
+
+    if (sunArcGroupRef.current) {
+      sunArcGroupRef.current.visible = showSunArc;
+    }
+  }, [timeOfDay, showSunArc]);
 
   // Main Three.js Initialization
   useEffect(() => {
@@ -125,15 +202,19 @@ export const TerraceViewer: React.FC<TerraceViewerProps> = ({
     controlsRef.current = controls;
 
     // Ambient & Directional Lighting
-    scene.add(new THREE.HemisphereLight(0xdae6f4, 0x6d6a63, 1.1));
+    const hemiLight = new THREE.HemisphereLight(0xdae6f4, 0x6d6a63, 1.1);
+    scene.add(hemiLight);
+    hemiLightRef.current = hemiLight;
+
     const sun = new THREE.DirectionalLight(0xfff3e0, 0.95);
     sun.position.set(13, 26, 16);
     sun.castShadow = true;
     sun.shadow.mapSize.set(2048, 2048);
     const sc = sun.shadow.camera;
-    sc.near = 1; sc.far = 90; sc.left = -18; sc.right = 18; sc.top = 18; sc.bottom = -18;
+    sc.near = 1; sc.far = 120; sc.left = -22; sc.right = 22; sc.top = 22; sc.bottom = -22;
     sun.shadow.bias = -0.0006; sun.shadow.radius = 2;
     scene.add(sun);
+    sunLightRef.current = sun;
 
     const fill = new THREE.DirectionalLight(0xc4d4e6, 0.35);
     fill.position.set(-16, 10, -18);
@@ -343,21 +424,67 @@ export const TerraceViewer: React.FC<TerraceViewerProps> = ({
       amber: new THREE.MeshBasicMaterial({ color: 0xffb020 })
     };
 
-    // Sun Visual Sphere & Glowing Aura in Sky
-    const sunPos = new THREE.Vector3(45, 65, 50);
-    const sunSphere = new THREE.Mesh(
-      new THREE.SphereGeometry(3.2, 16, 16),
-      new THREE.MeshBasicMaterial({ color: 0xfffae6, fog: false })
+    // Sun Visual Group (Core glowing sphere + Outer Corona Glow)
+    const sunGroup = new THREE.Group();
+    const sunCore = new THREE.Mesh(
+      new THREE.SphereGeometry(2.2, 24, 24),
+      new THREE.MeshBasicMaterial({ color: 0xfff5cc, fog: false })
     );
-    sunSphere.position.copy(sunPos);
-    scene.add(sunSphere);
+    sunGroup.add(sunCore);
 
-    const sunGlow = new THREE.Mesh(
-      new THREE.SphereGeometry(7.5, 16, 16),
+    const sunGlowMesh = new THREE.Mesh(
+      new THREE.SphereGeometry(5.2, 24, 24),
       new THREE.MeshBasicMaterial({ color: 0xffb020, transparent: true, opacity: 0.38, fog: false })
     );
-    sunGlow.position.copy(sunPos);
-    scene.add(sunGlow);
+    sunGroup.add(sunGlowMesh);
+    scene.add(sunGroup);
+    sunMeshRef.current = sunGroup;
+
+    // 3D Sun Path Arc Trajectory Line
+    const sunArcGroup = new THREE.Group();
+    const arcPts: THREE.Vector3[] = [];
+    for (let t = 6.0; t <= 18.0; t += 0.2) {
+      const norm = (t - 6.0) / 12.0;
+      const angleRad = Math.PI * norm;
+      const elevation = Math.sin(angleRad);
+      const y = 2.5 + elevation * 30.0;
+      const x = 35.0 * Math.cos(angleRad);
+      const z = -10.0 + 26.0 * Math.sin(angleRad);
+      arcPts.push(new THREE.Vector3(x, y, z));
+    }
+    const arcCurve = new THREE.CatmullRomCurve3(arcPts);
+    const tubeGeo = new THREE.TubeGeometry(arcCurve, 64, 0.12, 8, false);
+    const tubeMat = new THREE.MeshBasicMaterial({ color: 0xffb020, transparent: true, opacity: 0.65, fog: false });
+    const tubeMesh = new THREE.Mesh(tubeGeo, tubeMat);
+    sunArcGroup.add(tubeMesh);
+
+    // Hour Markers along the 3D Sun Arc
+    const hourMarkers = [
+      { hour: 6.0, label: '6 AM' },
+      { hour: 9.0, label: '9 AM' },
+      { hour: 12.0, label: '12 PM' },
+      { hour: 15.0, label: '3 PM' },
+      { hour: 18.0, label: '6 PM' },
+    ];
+
+    hourMarkers.forEach(({ hour }) => {
+      const norm = (hour - 6.0) / 12.0;
+      const angleRad = Math.PI * norm;
+      const elevation = Math.sin(angleRad);
+      const y = 2.5 + elevation * 30.0;
+      const x = 35.0 * Math.cos(angleRad);
+      const z = -10.0 + 26.0 * Math.sin(angleRad);
+
+      const mGeo = new THREE.SphereGeometry(0.55, 16, 16);
+      const mMat = new THREE.MeshBasicMaterial({ color: 0xffca28, fog: false });
+      const mMesh = new THREE.Mesh(mGeo, mMat);
+      mMesh.position.set(x, y, z);
+      mMesh.userData.hour = hour;
+      sunArcGroup.add(mMesh);
+    });
+
+    scene.add(sunArcGroup);
+    sunArcGroupRef.current = sunArcGroup;
 
     // Sky Dome
     const skyGeo = new THREE.SphereGeometry(320, 32, 20);
@@ -1210,6 +1337,28 @@ export const TerraceViewer: React.FC<TerraceViewerProps> = ({
     }
 
     function handleHover(e: PointerEvent) {
+      const hits = castRay(e);
+      if (hits.length > 0 && container) {
+        const hitMesh = hits[0].object as THREE.Mesh;
+        if (hitMesh.userData.asset || hitMesh.userData.hour !== undefined) {
+          container.style.cursor = 'pointer';
+          if (tooltipRef.current) {
+            const rect = container.getBoundingClientRect();
+            tooltipRef.current.style.display = 'block';
+            tooltipRef.current.style.left = `${e.clientX - rect.left + 12}px`;
+            tooltipRef.current.style.top = `${e.clientY - rect.top + 12}px`;
+            if (hitMesh.userData.hour !== undefined) {
+              const h = hitMesh.userData.hour;
+              const period = h >= 12 ? 'PM' : 'AM';
+              const dispH = h % 12 === 0 ? 12 : Math.floor(h % 12);
+              tooltipRef.current.textContent = `Click to set Sun Position: ${dispH}:00 ${period}`;
+            } else if (hitMesh.userData.asset) {
+              tooltipRef.current.textContent = hitMesh.userData.asset.name;
+            }
+          }
+          return;
+        }
+      }
       if (container) {
         container.style.cursor = 'grab';
       }
@@ -1228,7 +1377,24 @@ export const TerraceViewer: React.FC<TerraceViewerProps> = ({
 
     function handlePick(e: PointerEvent) {
       clearSelection();
-      onSelectAsset(null);
+      const hits = castRay(e);
+      if (hits.length > 0) {
+        const hitMesh = hits[0].object as THREE.Mesh;
+        if (hitMesh.userData.hour !== undefined && onTimeChange) {
+          onTimeChange(hitMesh.userData.hour);
+          return;
+        }
+        if (hitMesh.userData.asset) {
+          selectedMeshRef.current = hitMesh;
+          selectedOriginalMatRef.current = hitMesh.material;
+          hitMesh.material = highlightMat;
+          onSelectAsset(hitMesh.userData.asset);
+        } else {
+          onSelectAsset(null);
+        }
+      } else {
+        onSelectAsset(null);
+      }
     }
 
     let downPos = { x: 0, y: 0 };
