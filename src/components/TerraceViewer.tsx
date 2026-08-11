@@ -8,6 +8,8 @@ interface TerraceViewerProps {
   showText?: boolean;
   timeOfDay?: number;
   showSunArc?: boolean;
+  showColumnPlan?: boolean;
+  columnFocusMode?: boolean;
   activeView: ViewPreset | null;
   onSelectAsset: (asset: AssetInfo | null) => void;
   selectedAssetCode: string | null;
@@ -19,6 +21,8 @@ export const TerraceViewer: React.FC<TerraceViewerProps> = ({
   showText = true,
   timeOfDay = 12.0,
   showSunArc = true,
+  showColumnPlan = true,
+  columnFocusMode = false,
   activeView,
   onSelectAsset,
   selectedAssetCode,
@@ -75,7 +79,14 @@ export const TerraceViewer: React.FC<TerraceViewerProps> = ({
     Object.keys(layers).forEach((key) => {
       const group = layersGroupRef.current[key];
       if (group) {
-        if (key === 'dims') {
+        if (columnFocusMode) {
+          // Boss Column Focus Mode: show struct & colplan ONLY
+          if (key === 'struct') {
+            group.visible = true;
+          } else {
+            group.visible = false;
+          }
+        } else if (key === 'dims') {
           group.visible = showText && layers.dims;
         } else {
           group.visible = layers[key as LayerKey];
@@ -83,10 +94,29 @@ export const TerraceViewer: React.FC<TerraceViewerProps> = ({
       }
     });
 
-    if (layersGroupRef.current['labels']) {
-      layersGroupRef.current['labels'].visible = showText;
+    if (layersGroupRef.current['hvac']) {
+      layersGroupRef.current['hvac'].visible = !columnFocusMode && layers.hvac;
     }
-  }, [layers, showText]);
+    if (layersGroupRef.current['util']) {
+      layersGroupRef.current['util'].visible = !columnFocusMode && layers.util;
+    }
+    if (layersGroupRef.current['context']) {
+      layersGroupRef.current['context'].visible = !columnFocusMode && layers.context;
+    }
+    if (layersGroupRef.current['solar']) {
+      layersGroupRef.current['solar'].visible = !columnFocusMode && layers.solar;
+    }
+    if (layersGroupRef.current['base']) {
+      layersGroupRef.current['base'].visible = !columnFocusMode;
+    }
+    if (layersGroupRef.current['labels']) {
+      layersGroupRef.current['labels'].visible = showText && !columnFocusMode;
+    }
+
+    if (layersGroupRef.current['colplan']) {
+      layersGroupRef.current['colplan'].visible = showColumnPlan || activeView === 'plan' || columnFocusMode;
+    }
+  }, [layers, showText, showColumnPlan, activeView, columnFocusMode]);
 
   // Dynamic Sun Path & Shadow Position Update Effect
   useEffect(() => {
@@ -500,11 +530,15 @@ export const TerraceViewer: React.FC<TerraceViewerProps> = ({
       util: new THREE.Group(),
       context: new THREE.Group(),
       dims: new THREE.Group(),
+      colplan: new THREE.Group(),
       labels: new THREE.Group(),
       base: new THREE.Group()
     };
     const GLabels = LGroup.labels;
     GLabels.visible = showText;
+    if (LGroup.colplan) {
+      LGroup.colplan.visible = showColumnPlan || activeView === 'plan';
+    }
     layersGroupRef.current = LGroup;
 
     Object.keys(LGroup).forEach((k) => {
@@ -922,12 +956,12 @@ export const TerraceViewer: React.FC<TerraceViewerProps> = ({
       const py = getGirderY(px);
       postZPositions.forEach((pz) => {
         // Concrete pad footing on slab
-        box(0.50, 0.14, 0.50, M.slab, px, 0, pz, GSolar);
+        box(0.50, 0.14, 0.50, M.slab, px, 0, pz, GStruct);
         // Steel base plate
-        box(0.38, 0.03, 0.38, M.steelD, px, 0.14, pz, GSolar);
+        box(0.38, 0.03, 0.38, M.steelD, px, 0.14, pz, GStruct);
         // Vertical steel column girder extending from slab to main roof height Y(px)
         const colHeight = py - 0.17;
-        const postMesh = box(0.18, colHeight, 0.18, M.galvGirder, px, 0.17, pz, GSolar, {
+        const postMesh = box(0.18, colHeight, 0.18, M.galvGirder, px, 0.17, pz, GStruct, {
           code: 'R1-POST-GIRDER',
           name: 'Heavy Steel Post Girder (40 Total)',
           rows: [
@@ -943,8 +977,8 @@ export const TerraceViewer: React.FC<TerraceViewerProps> = ({
         pickable.push(postMesh);
 
         // Structural gusset / bracket at top and bottom
-        box(0.26, 0.20, 0.26, M.steelD, px, 0.17, pz, GSolar);
-        box(0.26, 0.25, 0.26, M.steelD, px, py - 0.25, pz, GSolar);
+        box(0.26, 0.20, 0.26, M.steelD, px, 0.17, pz, GStruct);
+        box(0.26, 0.25, 0.26, M.steelD, px, py - 0.25, pz, GStruct);
       });
     });
 
@@ -958,13 +992,205 @@ export const TerraceViewer: React.FC<TerraceViewerProps> = ({
         // Mid-height tie beam
         const tieMid = new THREE.Mesh(new THREE.BoxGeometry(spanW, 0.10, 0.10), M.steelD);
         tieMid.position.set(midX, py * 0.50, pz);
-        GSolar.add(tieMid);
+        GStruct.add(tieMid);
 
         // Top-height tie beam
         const tieTop = new THREE.Mesh(new THREE.BoxGeometry(spanW, 0.12, 0.12), M.steelD);
         tieTop.position.set(midX, py - 0.25, pz);
-        GSolar.add(tieTop);
+        GStruct.add(tieTop);
       });
+    });
+
+    // 7. INBUILT MONKEY LADDER WITH SAFETY CAGE FOR PV CLEANING & MAINTENANCE ACCESS
+    // Positioned attached to main structural post at X = -7.90m, Z = -4.60m (Direct access to Walkway 1 at Y = 3.66m)
+    const mkyX = -7.90;
+    const mkyZ = -4.20;
+    const mkyStartY = 0.14;
+    const mkyTopY = 3.80;
+    const mkyW = 0.52;
+
+    // Side Tubular Rails
+    [-mkyW / 2, +mkyW / 2].forEach((dx) => {
+      const rail = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.025, 0.025, mkyTopY - mkyStartY + 0.60, 16),
+        M.steelD
+      );
+      rail.position.set(mkyX + dx, mkyStartY + (mkyTopY - mkyStartY + 0.60) / 2, mkyZ);
+      rail.castShadow = true;
+      GStruct.add(rail);
+
+      // Curved Exit Grab Handles
+      const curveGeo = new THREE.TorusGeometry(0.22, 0.025, 12, 24, Math.PI / 2);
+      const grabHandle = new THREE.Mesh(curveGeo, M.steelD);
+      grabHandle.position.set(mkyX + dx, mkyTopY + 0.30, mkyZ + 0.22);
+      grabHandle.rotation.y = Math.PI / 2;
+      GStruct.add(grabHandle);
+    });
+
+    // Anti-slip Steel Rungs
+    const mkyRungCount = 14;
+    for (let r = 0; r <= mkyRungCount; r++) {
+      const ry = mkyStartY + 0.12 + r * 0.25;
+      if (ry <= mkyTopY) {
+        const rung = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.016, mkyW, 12), M.galvGirder);
+        rung.rotation.z = Math.PI / 2;
+        rung.position.set(mkyX, ry, mkyZ);
+        rung.castShadow = true;
+        GStruct.add(rung);
+      }
+    }
+
+    // Safety Cage Hoops (Monkey Cage Rings)
+    const cageRadius = 0.38;
+    const cageStartY = 1.70;
+    const cageTopY = 4.05;
+    const hoopCount = 6;
+    for (let h = 0; h < hoopCount; h++) {
+      const hy = cageStartY + h * ((cageTopY - cageStartY) / (hoopCount - 1));
+      const hoopGeo = new THREE.TorusGeometry(cageRadius, 0.018, 12, 28, Math.PI * 1.35);
+      const hoop = new THREE.Mesh(hoopGeo, M.galvGirder);
+      hoop.rotation.x = Math.PI / 2;
+      hoop.rotation.z = -Math.PI * 0.175;
+      hoop.position.set(mkyX, hy, mkyZ + 0.18);
+      hoop.castShadow = true;
+      GStruct.add(hoop);
+    }
+
+    // Vertical Safety Cage Flat Straps
+    for (let s = -2; s <= 2; s++) {
+      const angle = (s * Math.PI) / 5;
+      const sx = mkyX + cageRadius * Math.sin(angle);
+      const sz = mkyZ + 0.18 + cageRadius * Math.cos(angle);
+      const strap = new THREE.Mesh(
+        new THREE.BoxGeometry(0.025, cageTopY - cageStartY, 0.008),
+        M.galvGirder
+      );
+      strap.position.set(sx, cageStartY + (cageTopY - cageStartY) / 2, sz);
+      strap.castShadow = true;
+      GStruct.add(strap);
+    }
+
+    // Heavy Steel Structural Wall/Column Anchor Brackets
+    [0.90, 2.10, 3.30].forEach((by) => {
+      box(0.32, 0.06, 0.35, M.steelD, mkyX - 0.20, by, mkyZ, GStruct);
+    });
+
+    // Diamond Safety Platform Landing
+    const platform = box(0.85, 0.08, 0.85, M.walkwayMat, mkyX + 0.15, mkyTopY - 0.08, mkyZ + 0.35, GStruct, {
+      code: 'R1-MONKEY-LADDER',
+      name: 'Inbuilt Safety Monkey Ladder with Cage',
+      rows: [
+        ['Equipment Type', 'Inbuilt Vertical Safety Monkey Ladder with Protection Cage'],
+        ['Total Height', '3.80 m (12 ft 6 in) Vertical Climb'],
+        ['Safety Standard', 'OSHA / ISO Industrial Safety Cage Standard'],
+        ['Rung Spacing', '14 Anti-Slip Steel Rungs at 250 mm'],
+        ['Primary Function', 'Roof PV Solar Panel Wash & Cleaning Access'],
+        ['Target Walkway', 'Direct Exit to Walkway 1'],
+        ['Designed By', 'Engr. Shamroze']
+      ],
+      note: 'Inbuilt galvanised steel monkey ladder with 6 safety cage hoops, exit handles, and diamond safety platform engineered for solar panel cleaning crew.'
+    });
+    pickable.push(platform);
+
+    // Label Sprite for Monkey Ladder
+    const mkyLabel = createLabelSprite('INBUILT MONKEY LADDER', 'PV Cleaning & Wash Access', 1.8, 'rgba(15,23,42,0.95)', '#22c55e');
+    mkyLabel.position.set(mkyX + 0.20, mkyTopY + 0.70, mkyZ + 0.35);
+    GLabels.add(mkyLabel);
+
+    // 2D Structural Column Placement Plan Overlay Graphics (Clean CAD Architectural Drawing)
+    const GColPlan = LGroup.colplan;
+    const colGridLabels = ['1', '2', '3', '4', '5', '6', '7', '8'];
+    const rowGridLabels = ['A', 'B', 'C', 'D', 'E'];
+
+    // 1. Column Grid Lines & CAD Circular Axis Bubbles (8 X-Lines and 5 Z-Lines)
+    postXPositions.forEach((px, colIdx) => {
+      // Clean thin grid line on floor
+      const gLine = new THREE.Mesh(
+        new THREE.BoxGeometry(0.025, 0.005, 12.0),
+        new THREE.MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.75 })
+      );
+      gLine.position.set(px, 0.015, 0.0);
+      GColPlan.add(gLine);
+
+      // Top (Z = -6.2m) and Bottom (Z = +6.2m) CAD Axis Circles
+      [-6.2, +6.2].forEach((zPos) => {
+        const bubble = createGridBubbleSprite(colGridLabels[colIdx], '#0284c7', '#ffffff');
+        bubble.position.set(px, 0.15, zPos);
+        GColPlan.add(bubble);
+      });
+    });
+
+    postZPositions.forEach((pz, rowIdx) => {
+      // Clean thin grid line on floor
+      const gLine = new THREE.Mesh(
+        new THREE.BoxGeometry(15.8, 0.005, 0.025),
+        new THREE.MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.75 })
+      );
+      gLine.position.set(-1.4, 0.015, pz);
+      GColPlan.add(gLine);
+
+      // Left (X = -9.6m) and Right (X = +6.8m) CAD Axis Circles
+      [-9.6, +6.8].forEach((xPos) => {
+        const bubble = createGridBubbleSprite(rowGridLabels[rowIdx], '#0284c7', '#ffffff');
+        bubble.position.set(xPos, 0.15, pz);
+        GColPlan.add(bubble);
+      });
+    });
+
+    // 2. High-Contrast Target Rings & Markers for each of 40 Columns (C01 to C40)
+    const ringMatCyan = new THREE.MeshBasicMaterial({ color: 0x00f0ff, side: THREE.DoubleSide });
+    const ringMatRed = new THREE.MeshBasicMaterial({ color: 0xff0055, side: THREE.DoubleSide });
+    const dotMatWhite = new THREE.MeshBasicMaterial({ color: 0xffffff });
+
+    const ringGeoOuter = new THREE.RingGeometry(0.24, 0.32, 24);
+    const ringGeoInner = new THREE.RingGeometry(0.10, 0.18, 24);
+    const dotGeoCenter = new THREE.CircleGeometry(0.06, 16);
+
+    postXPositions.forEach((px, colIdx) => {
+      postZPositions.forEach((pz, rowIdx) => {
+        const cNum = colIdx * 5 + rowIdx + 1;
+        const colCode = `C${cNum < 10 ? '0' + cNum : cNum}`;
+        const colGrid = `${rowGridLabels[rowIdx]}-${colIdx + 1}`;
+
+        // Target rings flat on floor level (Clean, no floating text clutter)
+        const rOuter = new THREE.Mesh(ringGeoOuter, ringMatCyan);
+        rOuter.rotation.x = -Math.PI / 2;
+        rOuter.position.set(px, 0.02, pz);
+        GColPlan.add(rOuter);
+
+        const rInner = new THREE.Mesh(ringGeoInner, ringMatRed);
+        rInner.rotation.x = -Math.PI / 2;
+        rInner.position.set(px, 0.021, pz);
+        rInner.userData.asset = {
+          code: `COL-${colCode}`,
+          name: `Column ${colCode} (Grid ${colGrid})`,
+          rows: [
+            ['Column Code', colCode],
+            ['Grid Position', `Row ${rowGridLabels[rowIdx]}, Col ${colIdx + 1}`],
+            ['X Coordinate', `${px.toFixed(2)} m`],
+            ['Z Coordinate', `${pz.toFixed(2)} m`],
+            ['Structure Placement', '24" Double-Pole Pair directly under Walkway'],
+            ['Total Column Grid', '40 Steel Girders Matrix (8×5)']
+          ],
+          note: `Positioned at Grid ${colGrid}. Designed by Engr. Shamroze.`
+        };
+        pickable.push(rInner);
+        GColPlan.add(rInner);
+
+        const dCenter = new THREE.Mesh(dotGeoCenter, dotMatWhite);
+        dCenter.rotation.x = -Math.PI / 2;
+        dCenter.position.set(px, 0.022, pz);
+        GColPlan.add(dCenter);
+      });
+    });
+
+    // 3. Walkway 24" Twin Column Pair Indicators
+    twinPairs.forEach(([x1, x2], wIdx) => {
+      const midX = (x1 + x2) / 2;
+      const wNum = wIdx + 1;
+      const twinLabel = createLabelSprite(`WALKWAY ${wNum} TWIN POSTS`, `24" Spacing`, 1.4, 'rgba(15,23,42,0.95)', '#ffb020');
+      twinLabel.position.set(midX, 0.40, -5.2);
+      GColPlan.add(twinLabel);
     });
 
     // Label Sprite for 40 Girders Grid
@@ -1055,25 +1281,48 @@ export const TerraceViewer: React.FC<TerraceViewerProps> = ({
     const pGeo = new THREE.BoxGeometry(colWidth, 0.04, pDepth);
     const pMats = [M.frame, M.frame, M.pv, M.pvBack, M.frame, M.frame];
 
+    // Helper to generate clean CAD Grid Axis Bubble Sprites
+    function createGridBubbleSprite(label: string, bgCol: string = '#0284c7', textCol: string = '#ffffff') {
+      const [c, g] = cvs(128, 128);
+      g.fillStyle = bgCol;
+      g.beginPath();
+      g.arc(64, 64, 56, 0, Math.PI * 2);
+      g.fill();
+      g.strokeStyle = '#ffffff';
+      g.lineWidth = 5;
+      g.stroke();
+
+      g.fillStyle = textCol;
+      g.textAlign = 'center';
+      g.textBaseline = 'middle';
+      g.font = 'bold 50px ui-sans-serif, system-ui, sans-serif';
+      g.fillText(label, 64, 66);
+
+      const tx = new THREE.CanvasTexture(c);
+      const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tx, transparent: true, depthTest: true }));
+      sprite.scale.set(0.95, 0.95, 1);
+      return sprite;
+    }
+
     // Helper to generate text label textures on panels and walkways
     function createLabelSprite(text: string, sub: string, width: number, bgCol: string, fgCol: string) {
-      const [c, g] = cvs(380, 120);
+      const [c, g] = cvs(380, 110);
       g.fillStyle = bgCol;
-      g.fillRect(0, 0, 380, 120);
+      g.fillRect(0, 0, 380, 110);
       g.strokeStyle = fgCol;
       g.lineWidth = 4;
-      g.strokeRect(2, 2, 376, 116);
+      g.strokeRect(2, 2, 376, 106);
       g.fillStyle = fgCol;
       g.textAlign = 'center';
-      g.font = 'bold 46px ui-sans-serif, system-ui, sans-serif';
-      g.fillText(text, 190, 58);
+      g.font = 'bold 42px ui-sans-serif, system-ui, sans-serif';
+      g.fillText(text, 190, 52);
       if (sub) {
-        g.font = '600 28px ui-sans-serif, system-ui, sans-serif';
-        g.fillText(sub, 190, 98);
+        g.font = '600 26px ui-sans-serif, system-ui, sans-serif';
+        g.fillText(sub, 190, 88);
       }
       const tx = new THREE.CanvasTexture(c);
-      const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tx, transparent: true, depthTest: false }));
-      sprite.scale.set(width, width * 120 / 380, 1);
+      const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tx, transparent: true, depthTest: true }));
+      sprite.scale.set(width, width * 110 / 380, 1);
       return sprite;
     }
 

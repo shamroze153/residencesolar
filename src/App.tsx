@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Eye, EyeOff, Maximize2, Compass, Type, Layers } from 'lucide-react';
+import { Eye, EyeOff, Maximize2, Compass, Type, Layers, Grid, ShieldCheck, X } from 'lucide-react';
 import { Header } from './components/Header';
 import { LayerPanel } from './components/LayerPanel';
 import { InfoCard } from './components/InfoCard';
 import { HelpHint } from './components/HelpHint';
 import { SunPathControl } from './components/SunPathControl';
+import { ColumnPlanCard } from './components/ColumnPlanCard';
 import { TerraceViewer } from './components/TerraceViewer';
 import { AssetInfo, LayerKey, ViewPreset } from './types';
 
@@ -25,6 +26,12 @@ export default function App() {
   const [timeOfDay, setTimeOfDay] = useState<number>(12.0); // 6.0 AM to 18.5 PM
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [showSunArc, setShowSunArc] = useState<boolean>(true);
+
+  // Column Placement Plan Overlay toggle
+  const [showColumnPlan, setShowColumnPlan] = useState<boolean>(true);
+
+  // Boss Column Inspection Mode (Hide everything except columns, girders & monkey ladder)
+  const [columnFocusMode, setColumnFocusMode] = useState<boolean>(false);
 
   // Toggle state for full UI side panel controls
   const [showUI, setShowUI] = useState<boolean>(false);
@@ -104,12 +111,41 @@ export default function App() {
           showText={showText}
           timeOfDay={timeOfDay}
           showSunArc={showSunArc}
+          showColumnPlan={showColumnPlan}
+          columnFocusMode={columnFocusMode}
           activeView={activeView}
           onSelectAsset={handleSelectAsset}
           selectedAssetCode={selectedAsset?.code || null}
           onTimeChange={(t) => setTimeOfDay(t)}
         />
       </main>
+
+      {/* Boss Column Focus Mode Banner (Shown when columnFocusMode is active) */}
+      {columnFocusMode && (
+        <div className="fixed top-14 left-1/2 -translate-x-1/2 z-40 bg-[#0f172a]/95 border-2 border-[#38bdf8] shadow-[0_0_25px_rgba(56,189,248,0.4)] backdrop-blur-xl px-4 py-2 rounded-2xl flex items-center gap-3 text-white pointer-events-auto transition-all">
+          <div className="p-1.5 rounded-xl bg-[#38bdf8]/20 border border-[#38bdf8]/50 text-[#38bdf8] animate-pulse">
+            <ShieldCheck className="w-4 h-4" />
+          </div>
+          <div className="text-left">
+            <div className="text-xs font-bold font-mono tracking-wider text-[#38bdf8] uppercase flex items-center gap-2">
+              Boss Column Inspection Mode Active
+              <span className="text-[9px] bg-[#38bdf8] text-[#0f172a] px-1.5 py-0.2 rounded font-extrabold">
+                40 COLUMNS ONLY
+              </span>
+            </div>
+            <div className="text-[10.5px] text-[#cbd5e1]">
+              Hiding PV panels & clutter — 40 steel columns, footings & monkey ladder displayed clearly.
+            </div>
+          </div>
+          <button
+            onClick={() => setColumnFocusMode(false)}
+            className="ml-2 px-2.5 py-1 rounded-xl bg-[#38bdf8] hover:bg-[#0284c7] text-[#0f172a] hover:text-white font-bold text-xs transition-all cursor-pointer shadow-md flex items-center gap-1 shrink-0"
+          >
+            <X className="w-3.5 h-3.5" />
+            <span>Exit Focus</span>
+          </button>
+        </div>
+      )}
 
       {/* Top Side Bar: Positioned on Top-Left Side so structure is unobscured */}
       <div className="fixed top-3 left-3 sm:left-4 z-30 flex items-center gap-2 max-w-[95vw] flex-wrap pointer-events-auto">
@@ -125,6 +161,37 @@ export default function App() {
         >
           <Type className="w-3.5 h-3.5" />
           <span>{showText ? 'Hide Text' : 'Show Text'}</span>
+        </button>
+
+        {/* Boss Column Focus Mode Quick Toggle Button */}
+        <button
+          onClick={() => setColumnFocusMode(!columnFocusMode)}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all shadow-lg border backdrop-blur-md cursor-pointer ${
+            columnFocusMode
+              ? 'bg-[#38bdf8] border-[#38bdf8] text-[#0f172a] shadow-[0_0_15px_rgba(56,189,248,0.5)] font-extrabold ring-2 ring-[#38bdf8]'
+              : 'bg-[#111722]/90 border-[#38bdf8]/50 text-[#38bdf8] hover:bg-[#38bdf8]/20'
+          }`}
+          title="Boss Column Mode: Hide PV panels and show 40 columns clearly for structural review"
+        >
+          <ShieldCheck className="w-3.5 h-3.5 text-[#ffb020]" />
+          <span>{columnFocusMode ? 'Columns FOCUS (Active)' : 'Boss Column Mode'}</span>
+        </button>
+
+        {/* Dedicated 2D Column Placement Plan View Button */}
+        <button
+          onClick={() => {
+            setActiveView('plan');
+            setShowColumnPlan(true);
+          }}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all shadow-lg border backdrop-blur-md cursor-pointer ${
+            activeView === 'plan' && showColumnPlan
+              ? 'bg-[#0284c7] border-[#38bdf8] text-white hover:bg-[#0369a1]'
+              : 'bg-[#111722]/90 border-[#38bdf8]/40 text-[#38bdf8] hover:bg-[#38bdf8]/20'
+          }`}
+          title="Switch to 2D Top-Down Structural Column Placement Plan"
+        >
+          <Grid className="w-3.5 h-3.5" />
+          <span>Column Plan</span>
         </button>
 
         {/* Elegant Side Info Badge (Shown ONLY when showText is true) */}
@@ -181,6 +248,19 @@ export default function App() {
         showSunArc={showSunArc}
         setShowSunArc={setShowSunArc}
         showText={showText}
+      />
+
+      {/* Interactive 2D Column Placement Plan Control & Legend Overlay */}
+      <ColumnPlanCard
+        showColumnPlan={showColumnPlan}
+        setShowColumnPlan={setShowColumnPlan}
+        columnFocusMode={columnFocusMode}
+        onToggleColumnFocusMode={() => setColumnFocusMode(!columnFocusMode)}
+        activeView={activeView}
+        onSelectColumnPlanView={() => {
+          setActiveView('plan');
+          setShowColumnPlan(true);
+        }}
       />
 
       {/* Selected Asset Information Modal Card */}
