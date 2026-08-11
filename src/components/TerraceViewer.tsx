@@ -10,6 +10,10 @@ interface TerraceViewerProps {
   showSunArc?: boolean;
   showColumnPlan?: boolean;
   columnFocusMode?: boolean;
+  showMonkeyLadder?: boolean;
+  monkeyLadderX?: number;
+  monkeyLadderZ?: number;
+  monkeyLadderRotation?: number;
   activeView: ViewPreset | null;
   onSelectAsset: (asset: AssetInfo | null) => void;
   selectedAssetCode: string | null;
@@ -23,6 +27,10 @@ export const TerraceViewer: React.FC<TerraceViewerProps> = ({
   showSunArc = true,
   showColumnPlan = true,
   columnFocusMode = false,
+  showMonkeyLadder = true,
+  monkeyLadderX = -7.90,
+  monkeyLadderZ = -4.20,
+  monkeyLadderRotation = 0,
   activeView,
   onSelectAsset,
   selectedAssetCode,
@@ -46,6 +54,9 @@ export const TerraceViewer: React.FC<TerraceViewerProps> = ({
   const hemiLightRef = useRef<THREE.HemisphereLight | null>(null);
   const sunMeshRef = useRef<THREE.Group | null>(null);
   const sunArcGroupRef = useRef<THREE.Group | null>(null);
+
+  // Dynamic Monkey Ladder Ref
+  const monkeyLadderGroupRef = useRef<THREE.Group | null>(null);
 
   // Camera animation targets for smooth preset transitions
   const targetCamPos = useRef<THREE.Vector3>(new THREE.Vector3(13, 14, 18));
@@ -117,6 +128,19 @@ export const TerraceViewer: React.FC<TerraceViewerProps> = ({
       layersGroupRef.current['colplan'].visible = showColumnPlan || activeView === 'plan' || columnFocusMode;
     }
   }, [layers, showText, showColumnPlan, activeView, columnFocusMode]);
+
+  // Dynamic Monkey Ladder Position, Rotation & Visibility Update Effect
+  useEffect(() => {
+    if (!monkeyLadderGroupRef.current) return;
+
+    monkeyLadderGroupRef.current.visible = showMonkeyLadder ?? true;
+    monkeyLadderGroupRef.current.position.set(
+      monkeyLadderX ?? -7.90,
+      0,
+      monkeyLadderZ ?? -4.20
+    );
+    monkeyLadderGroupRef.current.rotation.y = THREE.MathUtils.degToRad(monkeyLadderRotation ?? 0);
+  }, [showMonkeyLadder, monkeyLadderX, monkeyLadderZ, monkeyLadderRotation]);
 
   // Dynamic Sun Path & Shadow Position Update Effect
   useEffect(() => {
@@ -1002,9 +1026,17 @@ export const TerraceViewer: React.FC<TerraceViewerProps> = ({
     });
 
     // 7. INBUILT MONKEY LADDER WITH SAFETY CAGE FOR PV CLEANING & MAINTENANCE ACCESS
-    // Positioned attached to main structural post at X = -7.90m, Z = -4.60m (Direct access to Walkway 1 at Y = 3.66m)
-    const mkyX = -7.90;
-    const mkyZ = -4.20;
+    // Created as an independent movable group attached to GStruct
+    const GMonkeyLadder = new THREE.Group();
+    GMonkeyLadder.name = 'MonkeyLadderGroup';
+    monkeyLadderGroupRef.current = GMonkeyLadder;
+    GStruct.add(GMonkeyLadder);
+
+    // Initial position & rotation setup
+    GMonkeyLadder.visible = showMonkeyLadder;
+    GMonkeyLadder.position.set(monkeyLadderX, 0, monkeyLadderZ);
+    GMonkeyLadder.rotation.y = THREE.MathUtils.degToRad(monkeyLadderRotation);
+
     const mkyStartY = 0.14;
     const mkyTopY = 3.80;
     const mkyW = 0.52;
@@ -1015,16 +1047,16 @@ export const TerraceViewer: React.FC<TerraceViewerProps> = ({
         new THREE.CylinderGeometry(0.025, 0.025, mkyTopY - mkyStartY + 0.60, 16),
         M.steelD
       );
-      rail.position.set(mkyX + dx, mkyStartY + (mkyTopY - mkyStartY + 0.60) / 2, mkyZ);
+      rail.position.set(dx, mkyStartY + (mkyTopY - mkyStartY + 0.60) / 2, 0);
       rail.castShadow = true;
-      GStruct.add(rail);
+      GMonkeyLadder.add(rail);
 
       // Curved Exit Grab Handles
       const curveGeo = new THREE.TorusGeometry(0.22, 0.025, 12, 24, Math.PI / 2);
       const grabHandle = new THREE.Mesh(curveGeo, M.steelD);
-      grabHandle.position.set(mkyX + dx, mkyTopY + 0.30, mkyZ + 0.22);
+      grabHandle.position.set(dx, mkyTopY + 0.30, 0.22);
       grabHandle.rotation.y = Math.PI / 2;
-      GStruct.add(grabHandle);
+      GMonkeyLadder.add(grabHandle);
     });
 
     // Anti-slip Steel Rungs
@@ -1034,9 +1066,9 @@ export const TerraceViewer: React.FC<TerraceViewerProps> = ({
       if (ry <= mkyTopY) {
         const rung = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.016, mkyW, 12), M.galvGirder);
         rung.rotation.z = Math.PI / 2;
-        rung.position.set(mkyX, ry, mkyZ);
+        rung.position.set(0, ry, 0);
         rung.castShadow = true;
-        GStruct.add(rung);
+        GMonkeyLadder.add(rung);
       }
     }
 
@@ -1051,32 +1083,32 @@ export const TerraceViewer: React.FC<TerraceViewerProps> = ({
       const hoop = new THREE.Mesh(hoopGeo, M.galvGirder);
       hoop.rotation.x = Math.PI / 2;
       hoop.rotation.z = -Math.PI * 0.175;
-      hoop.position.set(mkyX, hy, mkyZ + 0.18);
+      hoop.position.set(0, hy, 0.18);
       hoop.castShadow = true;
-      GStruct.add(hoop);
+      GMonkeyLadder.add(hoop);
     }
 
     // Vertical Safety Cage Flat Straps
     for (let s = -2; s <= 2; s++) {
       const angle = (s * Math.PI) / 5;
-      const sx = mkyX + cageRadius * Math.sin(angle);
-      const sz = mkyZ + 0.18 + cageRadius * Math.cos(angle);
+      const sx = cageRadius * Math.sin(angle);
+      const sz = 0.18 + cageRadius * Math.cos(angle);
       const strap = new THREE.Mesh(
         new THREE.BoxGeometry(0.025, cageTopY - cageStartY, 0.008),
         M.galvGirder
       );
       strap.position.set(sx, cageStartY + (cageTopY - cageStartY) / 2, sz);
       strap.castShadow = true;
-      GStruct.add(strap);
+      GMonkeyLadder.add(strap);
     }
 
     // Heavy Steel Structural Wall/Column Anchor Brackets
     [0.90, 2.10, 3.30].forEach((by) => {
-      box(0.32, 0.06, 0.35, M.steelD, mkyX - 0.20, by, mkyZ, GStruct);
+      box(0.32, 0.06, 0.35, M.steelD, -0.20, by, 0, GMonkeyLadder);
     });
 
     // Diamond Safety Platform Landing
-    const platform = box(0.85, 0.08, 0.85, M.walkwayMat, mkyX + 0.15, mkyTopY - 0.08, mkyZ + 0.35, GStruct, {
+    const platform = box(0.85, 0.08, 0.85, M.walkwayMat, 0.15, mkyTopY - 0.08, 0.35, GMonkeyLadder, {
       code: 'R1-MONKEY-LADDER',
       name: 'Inbuilt Safety Monkey Ladder with Cage',
       rows: [
@@ -1085,17 +1117,17 @@ export const TerraceViewer: React.FC<TerraceViewerProps> = ({
         ['Safety Standard', 'OSHA / ISO Industrial Safety Cage Standard'],
         ['Rung Spacing', '14 Anti-Slip Steel Rungs at 250 mm'],
         ['Primary Function', 'Roof PV Solar Panel Wash & Cleaning Access'],
-        ['Target Walkway', 'Direct Exit to Walkway 1'],
+        ['Position Status', 'Customizable & Editable (Drag / Move Enabled)'],
         ['Designed By', 'Engr. Shamroze']
       ],
       note: 'Inbuilt galvanised steel monkey ladder with 6 safety cage hoops, exit handles, and diamond safety platform engineered for solar panel cleaning crew.'
     });
     pickable.push(platform);
 
-    // Label Sprite for Monkey Ladder
-    const mkyLabel = createLabelSprite('INBUILT MONKEY LADDER', 'PV Cleaning & Wash Access', 1.8, 'rgba(15,23,42,0.95)', '#22c55e');
-    mkyLabel.position.set(mkyX + 0.20, mkyTopY + 0.70, mkyZ + 0.35);
-    GLabels.add(mkyLabel);
+    // Label Sprite for Monkey Ladder (Moves cleanly with the ladder group)
+    const mkyLabel = createLabelSprite('INBUILT MONKEY LADDER', 'PV Cleaning Access', 1.8, 'rgba(15,23,42,0.95)', '#22c55e');
+    mkyLabel.position.set(0.20, mkyTopY + 0.70, 0.35);
+    GMonkeyLadder.add(mkyLabel);
 
     // 2D Structural Column Placement Plan Overlay Graphics (Clean CAD Architectural Drawing)
     const GColPlan = LGroup.colplan;

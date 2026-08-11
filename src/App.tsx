@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Eye, EyeOff, Maximize2, Compass, Type, Layers, Grid, ShieldCheck, X } from 'lucide-react';
+import { Eye, EyeOff, Maximize2, Compass, Type, Layers, Grid, ShieldCheck, X, Move } from 'lucide-react';
 import { Header } from './components/Header';
 import { LayerPanel } from './components/LayerPanel';
 import { InfoCard } from './components/InfoCard';
 import { HelpHint } from './components/HelpHint';
 import { SunPathControl } from './components/SunPathControl';
 import { ColumnPlanCard } from './components/ColumnPlanCard';
+import { MonkeyLadderControl } from './components/MonkeyLadderControl';
 import { TerraceViewer } from './components/TerraceViewer';
 import { AssetInfo, LayerKey, ViewPreset } from './types';
 
@@ -32,6 +33,13 @@ export default function App() {
 
   // Boss Column Inspection Mode (Hide everything except columns, girders & monkey ladder)
   const [columnFocusMode, setColumnFocusMode] = useState<boolean>(false);
+
+  // Monkey Ladder Editable Position & Visibility State
+  const [showMonkeyLadder, setShowMonkeyLadder] = useState<boolean>(true);
+  const [monkeyLadderX, setMonkeyLadderX] = useState<number>(-7.90);
+  const [monkeyLadderZ, setMonkeyLadderZ] = useState<number>(-4.20);
+  const [monkeyLadderRotation, setMonkeyLadderRotation] = useState<number>(0);
+  const [showLadderEditor, setShowLadderEditor] = useState<boolean>(false);
 
   // Toggle state for full UI side panel controls
   const [showUI, setShowUI] = useState<boolean>(false);
@@ -65,6 +73,9 @@ export default function App() {
 
   const handleSelectAsset = useCallback((asset: AssetInfo | null) => {
     setSelectedAsset(asset);
+    if (asset?.code === 'R1-MONKEY-LADDER') {
+      setShowLadderEditor(true);
+    }
   }, []);
 
   // Keyboard shortcuts for layers (1-6) and text toggle (T) / UI toggle (H)
@@ -113,6 +124,10 @@ export default function App() {
           showSunArc={showSunArc}
           showColumnPlan={showColumnPlan}
           columnFocusMode={columnFocusMode}
+          showMonkeyLadder={showMonkeyLadder}
+          monkeyLadderX={monkeyLadderX}
+          monkeyLadderZ={monkeyLadderZ}
+          monkeyLadderRotation={monkeyLadderRotation}
           activeView={activeView}
           onSelectAsset={handleSelectAsset}
           selectedAssetCode={selectedAsset?.code || null}
@@ -175,6 +190,22 @@ export default function App() {
         >
           <ShieldCheck className="w-3.5 h-3.5 text-[#ffb020]" />
           <span>{columnFocusMode ? 'Columns FOCUS (Active)' : 'Boss Column Mode'}</span>
+        </button>
+
+        {/* Monkey Ladder Quick Toggle & Position Editor Button */}
+        <button
+          onClick={() => setShowLadderEditor(!showLadderEditor)}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all shadow-lg border backdrop-blur-md cursor-pointer ${
+            showLadderEditor
+              ? 'bg-[#22c55e] border-[#22c55e] text-[#0f172a] shadow-[0_0_15px_rgba(34,197,94,0.4)] font-extrabold'
+              : showMonkeyLadder
+              ? 'bg-[#111722]/90 border-[#22c55e]/50 text-[#22c55e] hover:bg-[#22c55e]/20'
+              : 'bg-[#111722]/90 border-[#3a475a] text-[#94a3b8] hover:text-white hover:bg-[#283444]'
+          }`}
+          title="Configure, move or hide the PV cleaning Monkey Ladder"
+        >
+          <Move className="w-3.5 h-3.5" />
+          <span>Ladder Move/Hide {showMonkeyLadder ? '(On)' : '(Off)'}</span>
         </button>
 
         {/* Dedicated 2D Column Placement Plan View Button */}
@@ -262,6 +293,21 @@ export default function App() {
           setShowColumnPlan(true);
         }}
       />
+
+      {/* Interactive Monkey Ladder Position & Visibility Editor Panel */}
+      {showLadderEditor && (
+        <MonkeyLadderControl
+          showMonkeyLadder={showMonkeyLadder}
+          setShowMonkeyLadder={setShowMonkeyLadder}
+          monkeyLadderX={monkeyLadderX}
+          setMonkeyLadderX={setMonkeyLadderX}
+          monkeyLadderZ={monkeyLadderZ}
+          setMonkeyLadderZ={setMonkeyLadderZ}
+          monkeyLadderRotation={monkeyLadderRotation}
+          setMonkeyLadderRotation={setMonkeyLadderRotation}
+          onClose={() => setShowLadderEditor(false)}
+        />
+      )}
 
       {/* Selected Asset Information Modal Card */}
       {selectedAsset && (
